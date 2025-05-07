@@ -24,12 +24,13 @@ comment: |
   higher version number will  always understand configuration files with
   a lower version number, but not the other way round.
 version: "1"
-endpoints:
-  - http://localhost:8530
-  - http://localhost:8531
-username: root
-password: ""
-prefix: "adb_loader_"
+database:
+  endpoints:
+    - http://localhost:8530
+    - http://localhost:8531
+  username: root
+  password: ""
+  prefix: "adb_loader_"
 active_usecases:
   crud:
     on: true

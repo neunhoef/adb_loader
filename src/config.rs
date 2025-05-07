@@ -12,13 +12,10 @@ pub enum ConfigError {
     Yaml(#[from] serde_yaml::Error),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub version: String,
-    pub endpoints: Vec<String>,
-    pub username: String,
-    pub password: String,
-    pub prefix: String,
+    pub database: DatabaseConfig,
     pub active_usecases: ActiveUseCases,
     pub metrics_port: u16,
     pub crud: CrudConfig,
@@ -27,19 +24,27 @@ pub struct Config {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DatabaseConfig {
+    pub endpoints: Vec<String>,
+    pub username: String,
+    pub password: String,
+    pub prefix: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ActiveUseCases {
     pub crud: UseCaseConfig,
     pub graph: UseCaseConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UseCaseConfig {
     pub on: bool,
     pub threads: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CrudConfig {
     pub number_of_collections: u32,
     pub number_of_shards: u32,
@@ -51,7 +56,7 @@ pub struct CrudConfig {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GraphConfig {
     pub number_of_vertices: u32,
     pub number_of_edges: u32,
