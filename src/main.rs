@@ -42,8 +42,9 @@ fn main() -> Result<()> {
     if config.active_usecases.crud.on {
         let crud_config = config.crud.clone();
         let db_config = config.database.clone();
+        let usecase_config = config.active_usecases.crud.clone();
         thread::spawn(move || {
-            if let Err(e) = crud::run(crud_config, db_config) {
+            if let Err(e) = crud::run(crud_config, db_config, usecase_config) {
                 error!("CRUD use case failed: {}", e);
             }
         });
