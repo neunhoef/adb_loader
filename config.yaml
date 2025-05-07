@@ -1,0 +1,85 @@
+---
+comment: |
+  This is a configuration file for adb_loader, which is a tool which can
+  put load on an ArangoDB cluster  fully automatically. The idea is that
+  it uses  a single human-editable  YAML file as configuration  and does
+  all the rest fully automatically. It creates data (if needed) and then
+  goes about  its business of using  the database. It keeps  a record of
+  what it does  and does some performance measurements.  It exposes some
+  metrics and writes  a log. The load generated  is highly configurable:
+  There  are a  number of  use cases,  each of  which can  be active  or
+  inactive. The amount of data produced and load generated is configured
+  for each use case.
+  It is possible  to use multiple instances of this  program on the same
+  cluster, but they work completely independently. To this end, there is
+  a  configuration  option called  `prefix`,  which  specifies a  prefix
+  string used for all databases in ArangoDB, so that different instances
+  can work on  different data sets. The explanations are  inline in this
+  document and  are intentionally not  comments, so that  automatic YAML
+  processing tools  will keep them. Please  leave them in when  you edit
+  the file! adb_loader itself will parse and read, but ignore all fields
+  called `comment`.
+  When use  cases are added,  we will  increase the version  number, use
+  case configurations are optional,  so that adb_loaders understanding a
+  higher version number will  always understand configuration files with
+  a lower version number, but not the other way round.
+version: "1"
+endpoints:
+  - http://localhost:8530
+  - http://localhost:8531
+username: root
+password: ""
+prefix: "adb_loader_"
+active_usecases:
+  crud:
+    on: true
+    threads: 8
+  graph:
+    on: true
+    threads: 8
+metrics_port: 7777
+crud:
+  comment: |
+    This use case  will create a single database  named `crud` (prefixed
+    with the  prefix), create a  number of collections and  documents in
+    there  using batch  inserts and  will then  approximately keep  this
+    number of  documents in each  collection but will be  doing constant
+    crud operations (inserts, deletes,  replaces, updates) in batches to
+    change  the data.  Additionally, it  will read  data using  document
+    operations.  You  can  configure  the  number  of  collections,  the
+    number of  shards in  each collection and  the number  of documents.
+    Furthermore, you can  specify for each document  an approximate size
+    in bytes.
+    Note that if  the use case detects a database  with the right number
+    of collections, it  will simply use it, regardless of  the number of
+    documents or size  of documents in these  collections, assuming that
+    the values are as expected. Otherwise, it will recreate the database
+    in  the beginning.  If `drop_first`  is true,  then the  database is
+    dropped in any case in the beginning.
+  number_of_collections: 3
+  number_of_shards: 3
+  replication_factor: 2
+  number_of_documents: 1000000
+  document_size: 1000
+  drop_first: false
+graph:
+  comment: |
+    This use case will create  a single database named `graph` (prefixed
+    with the  prefix) and create a  random graph in it.  One can specify
+    the number  of vertices and the  number of edges. Both  vertices and
+    edges  have a  configurable byte  size and  some random  properties,
+    which are always present. The program will then run graph traversals
+    with  random starting  points and  varying  depths using  AQL. If  a
+    database with this name is found  and it has collections `V` and `E`
+    as  expected, it  is simply  used without  checking the  graph size.
+    Otherwise,  the database  is dropped.  if `drop_first`  is set,  the
+    database is dropped and recreated anyway.
+  number_of_vertices: 1000000
+  number_of_edges: 1500000
+  number_of_shards: 3
+  replication_factor: 2
+  smart: false
+  vertex_size: 200
+  edge_size: 50
+  drop_first: false
+...
