@@ -6,6 +6,7 @@ use std::thread;
 use clap::Parser;
 use anyhow::Result;
 use serde_yaml;
+use log::{info, error};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -16,6 +17,9 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    // Initialize the logger
+    env_logger::init();
+    
     let args = Args::parse();
     
     let config = config::Config::from_file(&args.config)?;
@@ -24,15 +28,15 @@ fn main() -> Result<()> {
     println!("Loaded configuration (YAML format):");
     println!("{}", serde_yaml::to_string(&config)?);
     
-    println!("\nConfiguration summary:");
-    println!("Version: {}", config.version);
-    println!("Endpoints: {:?}", config.database.endpoints);
-    println!("Username: {}", config.database.username);
-    println!("Prefix: {}", config.database.prefix);
-    println!("Metrics port: {}", config.metrics_port);
-    println!("\nActive use cases:");
-    println!("CRUD: {} ({} threads)", config.active_usecases.crud.on, config.active_usecases.crud.threads);
-    println!("Graph: {} ({} threads)", config.active_usecases.graph.on, config.active_usecases.graph.threads);
+    info!("Configuration summary:");
+    info!("Version: {}", config.version);
+    info!("Endpoints: {:?}", config.database.endpoints);
+    info!("Username: {}", config.database.username);
+    info!("Prefix: {}", config.database.prefix);
+    info!("Metrics port: {}", config.metrics_port);
+    info!("Active use cases:");
+    info!("CRUD: {} ({} threads)", config.active_usecases.crud.on, config.active_usecases.crud.threads);
+    info!("Graph: {} ({} threads)", config.active_usecases.graph.on, config.active_usecases.graph.threads);
 
     // Start CRUD use case if enabled
     if config.active_usecases.crud.on {
@@ -40,7 +44,7 @@ fn main() -> Result<()> {
         let db_config = config.database.clone();
         thread::spawn(move || {
             if let Err(e) = crud::run(crud_config, db_config) {
-                eprintln!("CRUD use case failed: {}", e);
+                error!("CRUD use case failed: {}", e);
             }
         });
     }
