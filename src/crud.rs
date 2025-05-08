@@ -224,6 +224,62 @@ async fn initialize_database_and_collections(
     Ok(false)
 }
 
+/// Performs a single load testing operation by replacing a random batch of documents
+async fn perform_load_operation(
+    client: &reqwest::Client,
+    crud_config: &CrudConfig,
+    db_config: &DatabaseConfig,
+) -> anyhow::Result<()> {
+    let mut batch = Vec::new();
+    let endpoint_nr: usize;
+    let batch_size;
+    let collection_name;
+    {
+        let mut rng = rng();
+
+        // Select a random collection
+        let collection_num = rng.random_range(1..=crud_config.number_of_collections);
+        collection_name = format!("c{}", collection_num);
+
+        // Generate random batch size between 10 and 50
+        batch_size = rng.random_range(10..=50);
+
+        // Generate random document keys and create new documents
+        for _ in 0..batch_size {
+            let key_num = rng.random_range(1..=crud_config.number_of_documents);
+            let doc = generate_document(key_num, 100, 5); // Using fixed size for simplicity
+            batch.push(doc);
+        }
+
+        // Select random endpoint
+        endpoint_nr = rng.random_range(0..db_config.endpoints.len());
+    }
+    let endpoint = format!(
+        "{}/_db/crud/_api/document/{}",
+        db_config.endpoints[endpoint_nr], collection_name
+    );
+
+    // Send PUT request
+    let response = client.put(&endpoint).json(&batch).send().await?;
+
+    if !response.status().is_success() {
+        let error_status = response.status();
+        let error_text = response.text().await?;
+        return Err(anyhow::anyhow!(
+            "Failed to replace documents: {} - {}",
+            error_status,
+            error_text
+        ));
+    }
+
+    info!(
+        "Replaced {} documents in collection {}",
+        batch_size, collection_name
+    );
+
+    Ok(())
+}
+
 /// The actual async implementation of the CRUD use case.
 async fn run_async(crud_config: CrudConfig, db_config: DatabaseConfig) -> anyhow::Result<()> {
     let client = create_client().await;
@@ -235,8 +291,32 @@ async fn run_async(crud_config: CrudConfig, db_config: DatabaseConfig) -> anyhow
         database_existed
     );
 
-    // TODO: Implement the actual CRUD operations here
-    loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    // Create a shared client reference for the load testing tasks
+    let client = Arc::new(client);
+
+    // Spawn 10 concurrent load testing tasks
+    let mut handles = Vec::new();
+    for _ in 0..10 {
+        let client = Arc::clone(&client);
+        let crud_config = crud_config.clone();
+        let db_config = db_config.clone();
+
+        let handle = tokio::spawn(async move {
+            loop {
+                let sleep_ms = 500;
+                tokio::time::sleep(tokio::time::Duration::from_millis(sleep_ms)).await;
+
+                if let Err(e) = perform_load_operation(&client, &crud_config, &db_config).await {
+                    log::error!("Load operation failed: {}", e);
+                }
+            }
+        });
+
+        handles.push(handle);
     }
+
+    // Wait for all tasks to complete (they won't, as they run in an infinite loop)
+    futures::future::join_all(handles).await;
+
+    Ok(())
 }
