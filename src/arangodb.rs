@@ -134,7 +134,7 @@ pub async fn database_exists(
     config: &DatabaseConfig,
     db_name: &str,
 ) -> Result<bool, ArangoError> {
-    let endpoint = format!("{}/_api/database/{}", config.endpoints[0], db_name);
+    let endpoint = format!("{}/_db/{}_api/database/current", config.endpoints[0], db_name);
     
     let response = client
         .get(&endpoint)
