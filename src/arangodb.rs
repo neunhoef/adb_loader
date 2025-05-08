@@ -9,6 +9,10 @@ pub enum ArangoError {
     DatabaseExists(String),
     #[error("Database does not exist: {0}")]
     DatabaseNotFound(String),
+    #[error("Collection already exists: {0}")]
+    CollectionExists(String),
+    #[error("Collection does not exist: {0}")]
+    CollectionNotFound(String),
     #[error("HTTP request failed: {0}")]
     RequestError(#[from] reqwest::Error),
     #[error("Invalid response: {0}")]
@@ -116,6 +120,106 @@ pub async fn drop_database(
     }
 }
 
+/// Checks if a database exists in ArangoDB
+/// 
+/// # Arguments
+/// * `client` - The HTTP client to use for the request
+/// * `config` - The database configuration containing connection details
+/// * `db_name` - The name of the database to check
+/// 
+/// # Returns
+/// Result containing a boolean indicating if the database exists
+pub async fn database_exists(
+    client: &Client,
+    config: &DatabaseConfig,
+    db_name: &str,
+) -> Result<bool, ArangoError> {
+    let endpoint = format!("{}/_api/database/{}", config.endpoints[0], db_name);
+    
+    let response = client
+        .get(&endpoint)
+        .send()
+        .await?;
+
+    Ok(response.status().is_success())
+}
+
+/// Checks if a collection exists in a database
+/// 
+/// # Arguments
+/// * `client` - The HTTP client to use for the request
+/// * `config` - The database configuration containing connection details
+/// * `db_name` - The name of the database containing the collection
+/// * `collection_name` - The name of the collection to check
+/// 
+/// # Returns
+/// Result containing a boolean indicating if the collection exists
+pub async fn collection_exists(
+    client: &Client,
+    config: &DatabaseConfig,
+    db_name: &str,
+    collection_name: &str,
+) -> Result<bool, ArangoError> {
+    let endpoint = format!("{}/_db/{}/_api/collection/{}", config.endpoints[0], db_name, collection_name);
+    
+    let response = client
+        .get(&endpoint)
+        .send()
+        .await?;
+
+    Ok(response.status().is_success())
+}
+
+/// Creates a new collection in a database
+/// 
+/// # Arguments
+/// * `client` - The HTTP client to use for the request
+/// * `config` - The database configuration containing connection details
+/// * `db_name` - The name of the database to create the collection in
+/// * `collection_name` - The name of the collection to create
+/// * `number_of_shards` - The number of shards for the collection
+/// * `replication_factor` - The replication factor for the collection
+/// 
+/// # Returns
+/// Result indicating success or failure
+pub async fn create_collection(
+    client: &Client,
+    config: &DatabaseConfig,
+    db_name: &str,
+    collection_name: &str,
+    number_of_shards: u32,
+    replication_factor: u32,
+) -> Result<(), ArangoError> {
+    let endpoint = format!("{}/_db/{}/_api/collection", config.endpoints[0], db_name);
+    
+    let response = client
+        .post(&endpoint)
+        .json(&json!({
+            "name": collection_name,
+            "numberOfShards": number_of_shards,
+            "replicationFactor": replication_factor
+        }))
+        .send()
+        .await?;
+
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        let status = response.status();
+        let error_text = response.text().await?;
+        
+        // Check if the error is due to collection already existing
+        if status.as_u16() == 409 && error_text.contains("duplicate") {
+            return Err(ArangoError::CollectionExists(collection_name.to_string()));
+        }
+        
+        Err(ArangoError::InvalidResponse(format!(
+            "Failed to create collection: {} - {}",
+            status, error_text
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +283,12 @@ mod tests {
             Err(ArangoError::DatabaseNotFound(_)) => {
                 panic!("Empty name should not result in DatabaseNotFound error");
             }
+            Err(ArangoError::CollectionExists(_)) => {
+                panic!("Empty name should not result in CollectionExists error");
+            }
+            Err(ArangoError::CollectionNotFound(_)) => {
+                panic!("Empty name should not result in CollectionNotFound error");
+            }
             Err(ArangoError::InvalidResponse(_)) => {
                 // This is the expected error type
             }
@@ -206,5 +316,35 @@ mod tests {
             Ok(()) => panic!("Dropping non-existent database should fail"),
             Err(e) => panic!("Expected DatabaseNotFound error, got: {:?}", e),
         }
+    }
+
+    #[tokio::test]
+    async fn test_collection_creation_workflow() {
+        let config = create_test_config();
+        let client = create_client().await;
+        let db_name = "test_collection_db";
+        let collection_name = "test_collection";
+
+        // Create the database first
+        let result = create_database(&client, &config, db_name).await;
+        assert!(result.is_ok(), "Database creation should succeed");
+
+        // Verify collection doesn't exist initially
+        let exists = collection_exists(&client, &config, db_name, collection_name).await;
+        assert!(exists.is_ok(), "Collection existence check should succeed");
+        assert!(!exists.unwrap(), "Collection should not exist initially");
+
+        // Create the collection
+        let result = create_collection(&client, &config, db_name, collection_name, 1, 1).await;
+        assert!(result.is_ok(), "Collection creation should succeed");
+
+        // Verify collection exists after creation
+        let exists = collection_exists(&client, &config, db_name, collection_name).await;
+        assert!(exists.is_ok(), "Collection existence check should succeed");
+        assert!(exists.unwrap(), "Collection should exist after creation");
+
+        // Clean up - drop the database
+        let result = drop_database(&client, &config, db_name).await;
+        assert!(result.is_ok(), "Database deletion should succeed");
     }
 } 
