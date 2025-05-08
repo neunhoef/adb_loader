@@ -134,7 +134,7 @@ pub async fn database_exists(
     config: &DatabaseConfig,
     db_name: &str,
 ) -> Result<bool, ArangoError> {
-    let endpoint = format!("{}/_db/{}_api/database/current", config.endpoints[0], db_name);
+    let endpoint = format!("{}/_db/{}/_api/database/current", config.endpoints[0], db_name);
     
     let response = client
         .get(&endpoint)
@@ -346,5 +346,35 @@ mod tests {
         // Clean up - drop the database
         let result = drop_database(&client, &config, db_name).await;
         assert!(result.is_ok(), "Database deletion should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_database_exists() {
+        let config = create_test_config();
+        let client = create_client().await;
+        let db_name = "test_exists_db";
+
+        // First check - database should not exist
+        let exists = database_exists(&client, &config, db_name).await;
+        assert!(exists.is_ok(), "Database existence check should succeed");
+        assert!(!exists.unwrap(), "Database should not exist initially");
+
+        // Create the database
+        let result = create_database(&client, &config, db_name).await;
+        assert!(result.is_ok(), "Database creation should succeed");
+
+        // Second check - database should now exist
+        let exists = database_exists(&client, &config, db_name).await;
+        assert!(exists.is_ok(), "Database existence check should succeed");
+        assert!(exists.unwrap(), "Database should exist after creation");
+
+        // Clean up - drop the database
+        let result = drop_database(&client, &config, db_name).await;
+        assert!(result.is_ok(), "Database deletion should succeed");
+
+        // Final check - database should not exist again
+        let exists = database_exists(&client, &config, db_name).await;
+        assert!(exists.is_ok(), "Database existence check should succeed");
+        assert!(!exists.unwrap(), "Database should not exist after deletion");
     }
 } 
