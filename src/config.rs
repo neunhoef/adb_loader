@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -54,6 +54,7 @@ pub struct CrudConfig {
     pub drop_first: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+    pub insert_concurrency: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -75,8 +76,9 @@ impl Config {
         let mut file = File::open(path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        
+
         let config: Config = serde_yaml::from_str(&contents)?;
         Ok(config)
     }
-} 
+}
+

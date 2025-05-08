@@ -26,8 +26,9 @@ comment: |
 version: "1"
 database:
   endpoints:
-    - http://localhost:8530
-    - http://localhost:8531
+    - http://localhost:8529
+    - http://localhost:8539
+    - http://localhost:8549
   username: root
   password: ""
   prefix: "adb_loader_"
@@ -62,7 +63,8 @@ crud:
   replication_factor: 2
   number_of_documents: 1000000
   document_size: 1000
-  drop_first: false
+  drop_first: true
+  insert_concurrency: 100
 graph:
   comment: |
     This use case will create  a single database named `graph` (prefixed
