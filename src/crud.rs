@@ -3,6 +3,16 @@ use crate::config::{CrudConfig, DatabaseConfig, UseCaseConfig};
 use crate::arangodb::{create_client, create_database, collection_exists, create_collection, database_exists, drop_database};
 use log::info;
 use tokio::runtime::Builder;
+use rand::{Rng, rng};
+use rand::distr::{Alphanumeric, SampleString};
+use serde_json::{json, Value};
+use std::collections::HashMap;
+
+fn generate_random_ascii(length: usize) -> String {
+    // Uses thread_rng as the random number generator
+    // and Alphanumeric as the distribution of characters
+    Alphanumeric.sample_string(&mut rng(), length)
+}
 
 /// Runs the CRUD use case with the given configuration.
 /// Sets up a tokio runtime with the configured number of threads and executes the async code.
@@ -26,6 +36,86 @@ pub fn run(crud_config: CrudConfig, db_config: DatabaseConfig, usecase_config: U
 
     // Run the async code
     runtime.block_on(run_async(crud_config, db_config))
+}
+
+/// Generates a random document with the specified approximate size and number of attributes.
+/// The document will have a _key field, a number field, a bool field, and additional
+/// string attributes to reach the desired size.
+fn generate_document(
+    key: u32,
+    target_size: u32,
+    num_attributes: u32,
+) -> HashMap<String, Value> {
+    let mut doc = HashMap::new();
+    
+    // Add the _key field
+    doc.insert("_key".to_string(), json!(format!("K{}", key)));
+    
+    // Add random number and boolean
+    let mut rng = rng();
+    doc.insert("number".to_string(), json!(rng.random::<i32>()));
+    doc.insert("bool".to_string(), json!(rng.random::<bool>()));
+    
+    // Calculate approximate size per attribute
+    // Subtract size of _key, number, and bool fields (rough estimate)
+    let remaining_size = target_size.saturating_sub(50);
+    let size_per_attr = remaining_size / num_attributes;
+    
+    // Add string attributes
+    for i in 1..=num_attributes {
+        let attr_name = format!("a{}", i);
+        let attr_value = generate_random_ascii(size_per_attr as usize);
+        doc.insert(attr_name, json!(attr_value));
+    }
+    
+    doc
+}
+
+/// Inserts documents into a collection in batches
+async fn insert_documents(
+    client: &reqwest::Client,
+    db_config: &DatabaseConfig,
+    db_name: &str,
+    collection_name: &str,
+    num_documents: u32,
+    document_size: u32,
+    num_attributes: u32,
+) -> anyhow::Result<()> {
+    const BATCH_SIZE: u32 = 1000;
+    
+    for batch_start in (1..=num_documents).step_by(BATCH_SIZE as usize) {
+        let batch_end = (batch_start + BATCH_SIZE - 1).min(num_documents);
+        let mut batch = Vec::new();
+        
+        for i in batch_start..=batch_end {
+            let doc = generate_document(i, document_size, num_attributes);
+            batch.push(doc);
+        }
+        
+        let endpoint = format!("{}/_db/{}/_api/document/{}", 
+            db_config.endpoints[0], db_name, collection_name);
+        
+        let response = client
+            .post(&endpoint)
+            .json(&batch)
+            .send()
+            .await?;
+            
+        if !response.status().is_success() {
+            let error_status = response.status();
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!(
+                "Failed to insert documents: {} - {}",
+                error_status,
+                error_text
+            ));
+        }
+        
+        info!("Inserted documents {} to {} into collection {}", 
+            batch_start, batch_end, collection_name);
+    }
+    
+    Ok(())
 }
 
 /// Initializes the database and collections according to the configuration.
@@ -62,7 +152,7 @@ async fn initialize_database_and_collections(
     // Create the database
     create_database(client, db_config, &db_name).await?;
 
-    // Create all collections
+    // Create all collections and insert documents
     for i in 1..=crud_config.number_of_collections {
         let coll_name = format!("c{}", i);
         create_collection(
@@ -72,6 +162,18 @@ async fn initialize_database_and_collections(
             &coll_name,
             crud_config.number_of_shards,
             crud_config.replication_factor
+        ).await?;
+        
+        // Insert documents into the collection
+        // Use 5 attributes by default to reach the desired document size
+        insert_documents(
+            client,
+            db_config,
+            &db_name,
+            &coll_name,
+            crud_config.number_of_documents,
+            crud_config.document_size,
+            5
         ).await?;
     }
 

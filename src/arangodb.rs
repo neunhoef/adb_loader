@@ -11,8 +11,6 @@ pub enum ArangoError {
     DatabaseNotFound(String),
     #[error("Collection already exists: {0}")]
     CollectionExists(String),
-    #[error("Collection does not exist: {0}")]
-    CollectionNotFound(String),
     #[error("HTTP request failed: {0}")]
     RequestError(#[from] reqwest::Error),
     #[error("Invalid response: {0}")]
@@ -285,9 +283,6 @@ mod tests {
             }
             Err(ArangoError::CollectionExists(_)) => {
                 panic!("Empty name should not result in CollectionExists error");
-            }
-            Err(ArangoError::CollectionNotFound(_)) => {
-                panic!("Empty name should not result in CollectionNotFound error");
             }
             Err(ArangoError::InvalidResponse(_)) => {
                 // This is the expected error type
