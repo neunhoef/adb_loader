@@ -15,3 +15,5 @@ It also collects all abnormal events in a special alert log.
 The configuration file has comments to document itself.
 
 This program is written in Rust with the help of LLMs.
+
+THIS IS STILL WORK IN PROGRESS.
