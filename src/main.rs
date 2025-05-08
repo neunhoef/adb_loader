@@ -1,12 +1,13 @@
+mod arangodb;
 mod config;
 mod crud;
 
+use anyhow::Result;
+use clap::Parser;
+use log::{error, info};
+use serde_yaml;
 use std::path::PathBuf;
 use std::thread;
-use clap::Parser;
-use anyhow::Result;
-use serde_yaml;
-use log::{info, error};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -19,15 +20,15 @@ struct Args {
 fn main() -> Result<()> {
     // Initialize the logger
     env_logger::init();
-    
+
     let args = Args::parse();
-    
+
     let config = config::Config::from_file(&args.config)?;
-    
+
     // Dump the configuration in YAML format
     println!("Loaded configuration (YAML format):");
     println!("{}", serde_yaml::to_string(&config)?);
-    
+
     info!("Configuration summary:");
     info!("Version: {}", config.version);
     info!("Endpoints: {:?}", config.database.endpoints);
@@ -35,8 +36,14 @@ fn main() -> Result<()> {
     info!("Prefix: {}", config.database.prefix);
     info!("Metrics port: {}", config.metrics_port);
     info!("Active use cases:");
-    info!("CRUD: {} ({} threads)", config.active_usecases.crud.on, config.active_usecases.crud.threads);
-    info!("Graph: {} ({} threads)", config.active_usecases.graph.on, config.active_usecases.graph.threads);
+    info!(
+        "CRUD: {} ({} threads)",
+        config.active_usecases.crud.on, config.active_usecases.crud.threads
+    );
+    info!(
+        "Graph: {} ({} threads)",
+        config.active_usecases.graph.on, config.active_usecases.graph.threads
+    );
 
     // Start CRUD use case if enabled
     if config.active_usecases.crud.on {
@@ -49,7 +56,7 @@ fn main() -> Result<()> {
             }
         });
     }
-    
+
     // Keep main thread alive
     loop {
         thread::sleep(std::time::Duration::from_secs(1));
